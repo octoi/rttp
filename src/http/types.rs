@@ -11,6 +11,7 @@ pub enum Error {
     FailedToParseResponse(Method, String),
 }
 
+// This struct is sent to http_request
 #[derive(Debug, Clone)]
 pub struct Request {
     pub url: String,
@@ -27,7 +28,34 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(status: reqwest::StatusCode, data: String) -> Self {
-        Self { status, data }
+    pub fn new(status: reqwest::StatusCode, data: &str) -> Self {
+        Self {
+            status,
+            data: data.to_string(),
+        }
+    }
+}
+
+// ParsedRequest: Data for request
+#[derive(Debug, Clone)]
+pub struct DataRequest {
+    pub name: String,
+    pub request: Request,
+    pub show_error: bool,
+    pub show_output: bool,
+    pub show_status: bool,
+    pub show_time: bool,
+}
+
+impl DataRequest {
+    pub fn new(name: &str, request: Request) -> Self {
+        Self {
+            name: name.to_string(),
+            request,
+            show_error: true,
+            show_output: true,
+            show_time: true,
+            show_status: true,
+        }
     }
 }

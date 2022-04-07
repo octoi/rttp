@@ -4,30 +4,7 @@ use reqwest::Client;
 mod http_request;
 pub mod types;
 
-#[derive(Clone)]
-pub struct DataFx {
-    pub name: String,
-    pub request: self::types::Request,
-    pub show_error: bool,
-    pub show_output: bool,
-    pub show_status: bool,
-    pub show_time: bool,
-}
-
-impl DataFx {
-    pub fn new(name: String, request: self::types::Request) -> Self {
-        Self {
-            name,
-            request,
-            show_error: true,
-            show_output: true,
-            show_time: true,
-            show_status: true,
-        }
-    }
-}
-
-pub async fn send_request(client: &Client, data: DataFx) {
+pub async fn send_request(client: &Client, data: types::DataRequest) {
     println!("{}", data.name);
     let start = Instant::now();
 

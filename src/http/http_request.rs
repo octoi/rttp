@@ -27,7 +27,7 @@ async fn handle_response(
             let result = response.text().await;
 
             match result {
-                Ok(data) => Ok(types::Response::new(status, data)),
+                Ok(data) => Ok(types::Response::new(status, &data)),
                 Err(_) => Err(types::Error::FailedToParseResponse(method, url)),
             }
         }
