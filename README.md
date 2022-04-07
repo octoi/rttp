@@ -1,2 +1,3 @@
-# rttp
+# RTTP 🦀
+
 RUST http client
