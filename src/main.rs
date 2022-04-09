@@ -8,6 +8,10 @@ async fn main() {
 
     for file in files {
         let data_rq = parser::file::get_data_request_from_json(file);
-        http::send_request(&client, data_rq).await;
+
+        if data_rq.is_ok() {
+            // using `.unwrap()` because we know it will never fail
+            http::send_request(&client, data_rq.unwrap()).await;
+        }
     }
 }

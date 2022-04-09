@@ -1,46 +1,51 @@
+use serde_json::json;
+use std::str::FromStr;
+
 use crate::http::types::{DataRequest, Request};
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Method,
 };
-use serde_json::json;
-use std::str::FromStr;
 
-pub fn get_data_request_from_json(filename: String) -> DataRequest {
-    // Opening & getting json data
-    let file = std::fs::File::open(filename).expect("file should open read only");
-    let json: serde_json::Value =
-        serde_json::from_reader(file).expect("file should be proper JSON");
+pub fn get_data_request_from_json(file_path: String) -> Result<DataRequest, ()> {
+    // Opening file
+    let file = match std::fs::File::open(file_path.clone()) {
+        Ok(file) => Ok(file),
+        Err(err) => {
+            eprintln!("\n[-] FAILED TO OPEN FILE, {:?}\n", err.to_string());
+            Err(())
+        }
+    }?;
 
-    // Required fields
-    let url = json
-        .get("url")
-        .expect("URL not found")
-        .as_str()
-        .unwrap()
-        .to_string();
+    // Getting json data
+    let json: serde_json::Value = match serde_json::from_reader(file) {
+        Ok(json) => Ok(json),
+        Err(err) => {
+            eprintln!(
+                "\n[-] FAILED TO READ JSON CONTENTS FROM FILE {}: {:?} \n",
+                &file_path,
+                err.to_string()
+            );
+            Err(())
+        }
+    }?;
 
-    let method = json
-        .get("method")
-        .expect("METHOD not found")
-        .as_str()
-        .unwrap()
-        .to_lowercase();
+    // Getting required fields
+    // `url`, `method` are required fields
 
-    let method = match method.as_str() {
-        "get" => Method::GET,
-        "post" => Method::POST,
-        "put" => Method::PUT,
-        "patch" => Method::PATCH,
-        "delete" => Method::DELETE,
-        "connect" => Method::CONNECT,
-        "head" => Method::HEAD,
-        "options" => Method::OPTIONS,
-        "trace" => Method::TRACE,
-        _ => Method::GET,
-    };
+    let url = match json.get("url") {
+        Some(url) => Ok(url.as_str().unwrap().to_string()),
+        None => {
+            eprintln!("\nFIELD `url` NOT FOUND IN {}\n", &file_path);
+            Err(())
+        }
+    }?;
+
+    let method = get_method(&json, &file_path)?;
 
     // Optional fields
+    // `name`, `body`, `headers`, `show_error`, `show_output`, `show_status`, `show_time` are optional fields
+
     let name = json!(format!("{}:{}", method.to_string(), url.to_string()));
     let name = json.get("name").unwrap_or_else(|| &name).to_string(); // if name not exist, combining method:url, eg: GET:https://sample.api
 
@@ -50,9 +55,63 @@ pub fn get_data_request_from_json(filename: String) -> DataRequest {
         None => json!({}),
     };
 
-    let headers: HeaderMap = match json.get("headers") {
+    let headers = get_headers(&json, &file_path)?;
+
+    // Building request
+    let request = Request {
+        url,
+        method,
+        body,
+        headers,
+    };
+
+    // returning DataRequest
+
+    Ok(DataRequest::new(&name, request))
+}
+
+// get method
+fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, ()> {
+    match json.get("method") {
+        Some(method) => {
+            return Ok(match method.as_str().unwrap().to_lowercase().as_str() {
+                "get" => Method::GET,
+                "post" => Method::POST,
+                "put" => Method::PUT,
+                "patch" => Method::PATCH,
+                "delete" => Method::DELETE,
+                "connect" => Method::CONNECT,
+                "head" => Method::HEAD,
+                "options" => Method::OPTIONS,
+                "trace" => Method::TRACE,
+                _ => {
+                    eprintln!(
+                        "\n[-] INVALID METHOD {} FOUND IN FILE{}\n",
+                        method.as_str().unwrap(),
+                        &file_path
+                    );
+                    return Err(());
+                }
+            })
+        }
+        None => {
+            eprintln!("\nFIELD `method` NOT FOUND IN {}\n", &file_path);
+            return Err(());
+        }
+    };
+}
+
+// get headers
+fn get_headers(json: &serde_json::Value, file_path: &str) -> Result<HeaderMap, ()> {
+    match json.get("headers") {
         Some(headers) => {
-            let headers = headers.to_owned().as_object().unwrap().to_owned();
+            let headers = match headers.to_owned().as_object() {
+                Some(headers) => headers.to_owned(),
+                None => {
+                    eprintln!("Headers are not used correctly in file {}", file_path);
+                    return Err(());
+                }
+            };
             let mut headers_map = HeaderMap::new();
 
             for elem in headers {
@@ -61,17 +120,8 @@ pub fn get_data_request_from_json(filename: String) -> DataRequest {
                 headers_map.insert(key, val);
             }
 
-            headers_map
+            return Ok(headers_map);
         }
-        None => HeaderMap::new(),
-    };
-
-    let request = Request {
-        url,
-        method,
-        body,
-        headers,
-    };
-
-    DataRequest::new(&name, request)
+        None => return Ok(HeaderMap::new()),
+    }
 }
