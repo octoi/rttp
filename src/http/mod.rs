@@ -1,11 +1,12 @@
+use reqwest::Client;
 use std::time::Instant;
 
-use reqwest::Client;
 mod http_request;
 pub mod types;
 
 pub async fn send_request(client: &Client, data: types::DataRequest) {
-    println!("{}", data.name);
+    println!("NAME: {}", data.name);
+    println!("URL: {}", data.request.url);
     let start = Instant::now();
 
     match http_request::http_request(client, data.request).await {
@@ -15,7 +16,7 @@ pub async fn send_request(client: &Client, data: types::DataRequest) {
             }
 
             if data.show_output {
-                println!("{}", response.data);
+                println!("\n{}\n", response.data);
             }
         }
         Err(err) => {
@@ -27,6 +28,7 @@ pub async fn send_request(client: &Client, data: types::DataRequest) {
 
     let duration = start.elapsed();
     if data.show_time {
-        println!("completed in {:?}", duration);
+        println!("completed in {:?} ✨", duration);
     }
+    println!("---")
 }
