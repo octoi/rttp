@@ -1,13 +1,8 @@
-use serde_json::json;
-use std::str::FromStr;
-
+use super::file_helper::{get_headers, get_log_option, get_method};
 use crate::http::types::{DataRequest, Request};
-use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue},
-    Method,
-};
+use serde_json::json;
 
-pub fn get_data_request_from_json(file_path: String) -> Result<DataRequest, ()> {
+pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>, ()> {
     // Opening file
     let file = match std::fs::File::open(file_path.clone()) {
         Ok(file) => Ok(file),
@@ -30,13 +25,15 @@ pub fn get_data_request_from_json(file_path: String) -> Result<DataRequest, ()> 
         }
     }?;
 
+    // TODO: check whether the file contains multiple requests
+
     // Getting required fields
     // `url`, `method` are required fields
 
     let url = match json.get("url") {
         Some(url) => Ok(url.as_str().unwrap().to_string()),
         None => {
-            eprintln!("\nFIELD `url` NOT FOUND IN {}\n", &file_path);
+            eprintln!("\n[-] FIELD `url` NOT FOUND IN {}\n", &file_path);
             Err(())
         }
     }?;
@@ -57,6 +54,12 @@ pub fn get_data_request_from_json(file_path: String) -> Result<DataRequest, ()> 
 
     let headers = get_headers(&json, &file_path)?;
 
+    // Log options
+    let show_error = get_log_option("show_error", &json, &file_path);
+    let show_output = get_log_option("show_output", &json, &file_path);
+    let show_status = get_log_option("show_status", &json, &file_path);
+    let show_time = get_log_option("show_time", &json, &file_path);
+
     // Building request
     let request = Request {
         url,
@@ -66,62 +69,12 @@ pub fn get_data_request_from_json(file_path: String) -> Result<DataRequest, ()> 
     };
 
     // returning DataRequest
-
-    Ok(DataRequest::new(&name, request))
-}
-
-// get method
-fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, ()> {
-    match json.get("method") {
-        Some(method) => {
-            return Ok(match method.as_str().unwrap().to_lowercase().as_str() {
-                "get" => Method::GET,
-                "post" => Method::POST,
-                "put" => Method::PUT,
-                "patch" => Method::PATCH,
-                "delete" => Method::DELETE,
-                "connect" => Method::CONNECT,
-                "head" => Method::HEAD,
-                "options" => Method::OPTIONS,
-                "trace" => Method::TRACE,
-                _ => {
-                    eprintln!(
-                        "\n[-] INVALID METHOD {} FOUND IN FILE{}\n",
-                        method.as_str().unwrap(),
-                        &file_path
-                    );
-                    return Err(());
-                }
-            })
-        }
-        None => {
-            eprintln!("\nFIELD `method` NOT FOUND IN {}\n", &file_path);
-            return Err(());
-        }
-    };
-}
-
-// get headers
-fn get_headers(json: &serde_json::Value, file_path: &str) -> Result<HeaderMap, ()> {
-    match json.get("headers") {
-        Some(headers) => {
-            let headers = match headers.to_owned().as_object() {
-                Some(headers) => headers.to_owned(),
-                None => {
-                    eprintln!("Headers are not used correctly in file {}", file_path);
-                    return Err(());
-                }
-            };
-            let mut headers_map = HeaderMap::new();
-
-            for elem in headers {
-                let val: HeaderValue = elem.1.as_str().unwrap().parse().unwrap();
-                let key = HeaderName::from_str(elem.0.as_str()).unwrap();
-                headers_map.insert(key, val);
-            }
-
-            return Ok(headers_map);
-        }
-        None => return Ok(HeaderMap::new()),
-    }
+    Ok(vec![DataRequest {
+        name,
+        request,
+        show_error,
+        show_output,
+        show_status,
+        show_time,
+    }])
 }

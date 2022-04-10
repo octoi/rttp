@@ -7,11 +7,15 @@ async fn main() {
     let client = reqwest::Client::new();
 
     for file in files {
-        let data_rq = parser::file::get_data_request_from_json(file);
+        let data_rqs = parser::file::get_data_request_from_json(file);
 
-        if data_rq.is_ok() {
+        if data_rqs.is_ok() {
             // using `.unwrap()` because we know it will never fail
-            http::send_request(&client, data_rq.unwrap()).await;
+            let data_rqs = data_rqs.unwrap();
+
+            for data_rq in data_rqs {
+                http::send_request(&client, data_rq).await;
+            }
         }
     }
 }
