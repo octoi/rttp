@@ -5,6 +5,8 @@ use reqwest::{
 use serde_json::json;
 use std::str::FromStr;
 
+use crate::http::types::{DataRequest, Request};
+
 // Get JSON from file
 // Read file & return json contents in it
 pub fn read_and_get_json(file_path: &String) -> Result<serde_json::Value, ()> {
@@ -64,10 +66,14 @@ pub fn get_body(json: &serde_json::Value) -> serde_json::Value {
     Reading json content and lowercasing the string to match all possible cases
         eg: "PoSt" & "POST" can be lowecased to "post", so it will work same
 */
-pub fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, ()> {
+pub fn get_method(
+    json: &serde_json::Value,
+    file_path: &str,
+    is_multiple_requests: bool,
+) -> Result<Method, ()> {
     match json.get("method") {
         Some(method) => {
-            return Ok(match method.as_str().unwrap().to_lowercase().as_str() {
+            let method = match method.as_str().unwrap().to_lowercase().as_str() {
                 "get" => Method::GET,
                 "post" => Method::POST,
                 "put" => Method::PUT,
@@ -85,13 +91,17 @@ pub fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, (
                     );
                     return Err(());
                 }
-            })
+            };
+
+            Ok(method)
         }
         None => {
-            eprintln!("\n[-] FIELD `method` NOT FOUND IN {}\n", &file_path);
-            return Err(());
+            if !is_multiple_requests {
+                eprintln!("\n[-] FIELD `method` NOT FOUND IN {}\n", &file_path);
+            }
+            Err(())
         }
-    };
+    }
 }
 
 // get headers
@@ -121,15 +131,91 @@ pub fn get_headers(json: &serde_json::Value, file_path: &str) -> Result<HeaderMa
 // Get log options from JSON
 // `show_error`, `show_time`, `show_output`, `show_status`
 // Default value should be true
-pub fn get_log_option(key: &str, json: &serde_json::Value, file_path: &str) -> bool {
+pub fn get_log_option(
+    key: &str,
+    json: &serde_json::Value,
+    file_path: &str,
+    default: Option<bool>,
+) -> Result<bool, ()> {
     match json.get(key) {
-        Some(val) => val.as_bool().unwrap_or_else(|| {
-            eprintln!(
-                "[-] FIELD `{}` IS NOT A VALID BOOLEAN (true/false) IN FILE {}",
-                key, file_path
-            );
-            false
-        }),
-        None => true,
+        Some(val) => match val.as_bool() {
+            Some(val) => Ok(val),
+            None => {
+                eprintln!(
+                    "[-] FIELD `{}` IS NOT A VALID BOOLEAN (true/false) IN FILE {}",
+                    key, file_path
+                );
+                Err(())
+            }
+        },
+        None => Ok(default.unwrap_or(true)),
+    }
+}
+
+// Helper function to build a request from a single file
+pub fn craft_data_request(
+    json: &serde_json::Value,
+    url: String,
+    method: Method,
+    body: serde_json::Value,
+    headers: HeaderMap,
+    show_error: bool,
+    show_output: bool,
+    show_status: bool,
+    show_time: bool,
+) -> DataRequest {
+    let name = json!(format!(
+        "{}:{}",
+        // Calling unwrap because we know this file only contains on request
+        method.to_string(),
+        url
+    ));
+    let name = json.get("name").unwrap_or_else(|| &name).to_string(); // if name not exist, combining method:url, eg: GET:https://sample.api
+
+    // Building request
+    let request = Request {
+        url,
+        method,
+        body,
+        headers,
+    };
+
+    DataRequest {
+        name,
+        request,
+        show_error,
+        show_output,
+        show_status,
+        show_time,
+    }
+}
+
+// Validate global fields
+pub fn validate_field<T>(
+    result: Result<T, ()>,
+    is_multiple_requests: bool,
+) -> Result<Option<T>, ()> {
+    match result {
+        Ok(val) => Ok(Some(val)),
+        Err(_) => {
+            if !is_multiple_requests {
+                return Err(());
+            }
+            Ok(None)
+        }
+    }
+}
+
+// Use global fields in requests
+pub fn use_global_field<T>(result: Result<T, ()>, swap: Option<T>) -> Result<T, ()> {
+    match result {
+        Ok(val) => Ok(val),
+        Err(_) => {
+            if swap.is_some() {
+                Ok(swap.unwrap())
+            } else {
+                return Err(());
+            }
+        }
     }
 }
