@@ -2,9 +2,68 @@ use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Method,
 };
+use serde_json::json;
 use std::str::FromStr;
 
+// Get JSON from file
+// Read file & return json contents in it
+pub fn read_and_get_json(file_path: &String) -> Result<serde_json::Value, ()> {
+    // Opening file
+    let file = match std::fs::File::open(file_path.clone()) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("\n[-] FAILED TO OPEN FILE, {:?}\n", err.to_string());
+            return Err(());
+        }
+    };
+
+    // Getting json data
+    let json: serde_json::Value = match serde_json::from_reader(file) {
+        Ok(json) => json,
+        Err(err) => {
+            eprintln!(
+                "\n[-] FAILED TO READ JSON CONTENTS FROM FILE {}: {:?} \n",
+                &file_path,
+                err.to_string()
+            );
+            return Err(());
+        }
+    };
+
+    Ok(json)
+}
+
+// Get URL
+pub fn get_url(
+    json: &serde_json::Value,
+    file_path: &str,
+    is_multiple_requests: bool,
+) -> Result<String, ()> {
+    match json.get("url") {
+        Some(url) => Ok(url.as_str().unwrap().to_string()),
+        None => {
+            if !is_multiple_requests {
+                eprintln!("\n[-] FIELD `url` NOT FOUND IN {}\n", &file_path);
+            }
+            Err(())
+        }
+    }
+}
+
+// Get Body
+pub fn get_body(json: &serde_json::Value) -> serde_json::Value {
+    match json.get("body") {
+        // getting body if exist or returning an empty json
+        Some(data) => data.to_owned(),
+        None => json!({}),
+    }
+}
+
 // get method
+/*
+    Reading json content and lowercasing the string to match all possible cases
+        eg: "PoSt" & "POST" can be lowecased to "post", so it will work same
+*/
 pub fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, ()> {
     match json.get("method") {
         Some(method) => {
