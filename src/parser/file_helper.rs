@@ -36,19 +36,10 @@ pub fn read_and_get_json(file_path: &String) -> Result<serde_json::Value, ()> {
 }
 
 // Get URL
-pub fn get_url(
-    json: &serde_json::Value,
-    file_path: &str,
-    is_multiple_requests: bool,
-) -> Result<String, ()> {
+pub fn get_url(json: &serde_json::Value, file_path: &str) -> Result<String, String> {
     match json.get("url") {
         Some(url) => Ok(url.as_str().unwrap().to_string()),
-        None => {
-            if !is_multiple_requests {
-                eprintln!("\n[-] FIELD `url` NOT FOUND IN {}\n", &file_path);
-            }
-            Err(())
-        }
+        None => Err(format!("[-] FIELD `url` NOT FOUND IN {}", &file_path)),
     }
 }
 
@@ -66,11 +57,7 @@ pub fn get_body(json: &serde_json::Value) -> serde_json::Value {
     Reading json content and lowercasing the string to match all possible cases
         eg: "PoSt" & "POST" can be lowecased to "post", so it will work same
 */
-pub fn get_method(
-    json: &serde_json::Value,
-    file_path: &str,
-    is_multiple_requests: bool,
-) -> Result<Method, ()> {
+pub fn get_method(json: &serde_json::Value, file_path: &str) -> Result<Method, String> {
     match json.get("method") {
         Some(method) => {
             let method = match method.as_str().unwrap().to_lowercase().as_str() {
@@ -84,34 +71,30 @@ pub fn get_method(
                 "options" => Method::OPTIONS,
                 "trace" => Method::TRACE,
                 _ => {
-                    eprintln!(
-                        "\n[-] INVALID METHOD {} FOUND IN FILE{}\n",
+                    return Err(format!(
+                        "[-] INVALID METHOD {} FOUND IN FILE{}",
                         method.as_str().unwrap(),
                         &file_path
-                    );
-                    return Err(());
+                    ));
                 }
             };
 
             Ok(method)
         }
-        None => {
-            if !is_multiple_requests {
-                eprintln!("\n[-] FIELD `method` NOT FOUND IN {}\n", &file_path);
-            }
-            Err(())
-        }
+        None => Err(format!("[-] FIELD `method` NOT FOUND IN {}", &file_path)),
     }
 }
 
 // get headers
-pub fn get_headers(json: &serde_json::Value, file_path: &str) -> Result<HeaderMap, ()> {
+pub fn get_headers(json: &serde_json::Value, file_path: &str) -> Result<HeaderMap, String> {
     if let Some(headers) = json.get("headers") {
         let headers = match headers.to_owned().as_object() {
             Some(headers) => headers.to_owned(),
             None => {
-                eprintln!("[-] Headers are not used correctly in file {}", file_path);
-                return Err(());
+                return Err(format!(
+                    "[-] Headers are not used correctly in file {}",
+                    file_path
+                ));
             }
         };
         let mut headers_map = HeaderMap::new();
@@ -136,17 +119,14 @@ pub fn get_log_option(
     json: &serde_json::Value,
     file_path: &str,
     default: Option<bool>,
-) -> Result<bool, ()> {
+) -> Result<bool, String> {
     match json.get(key) {
         Some(val) => match val.as_bool() {
             Some(val) => Ok(val),
-            None => {
-                eprintln!(
-                    "[-] FIELD `{}` IS NOT A VALID BOOLEAN (true/false) IN FILE {}",
-                    key, file_path
-                );
-                Err(())
-            }
+            None => Err(format!(
+                "[-] FIELD `{}` IS NOT A VALID BOOLEAN (true/false) IN FILE {}",
+                key, file_path
+            )),
         },
         None => Ok(default.unwrap_or(true)),
     }
@@ -191,14 +171,15 @@ pub fn craft_data_request(
 }
 
 // Validate global fields
-pub fn validate_field<T>(
-    result: Result<T, ()>,
+pub fn validate_field<T, E: std::fmt::Display>(
+    result: Result<T, E>,
     is_multiple_requests: bool,
 ) -> Result<Option<T>, ()> {
     match result {
         Ok(val) => Ok(Some(val)),
-        Err(_) => {
+        Err(err) => {
             if !is_multiple_requests {
+                eprintln!("\n{}\n", err);
                 return Err(());
             }
             Ok(None)
@@ -207,15 +188,30 @@ pub fn validate_field<T>(
 }
 
 // Use global fields in requests
-pub fn use_global_field<T>(result: Result<T, ()>, swap: Option<T>) -> Result<T, ()> {
+pub fn use_global_field<T, E: std::fmt::Display>(
+    result: Result<T, E>,
+    swap: Option<T>,
+) -> Result<T, ()> {
     match result {
         Ok(val) => Ok(val),
-        Err(_) => {
+        Err(err) => {
             if swap.is_some() {
                 Ok(swap.unwrap())
             } else {
+                eprintln!("\n{}\n", err);
                 return Err(());
             }
+        }
+    }
+}
+
+// Convert Result<T, String> to Result<T, ()>
+pub fn handle_result_error<T>(result: Result<T, String>) -> Result<T, ()> {
+    match result {
+        Ok(val) => Ok(val),
+        Err(err) => {
+            eprintln!("{}", err);
+            Err(())
         }
     }
 }

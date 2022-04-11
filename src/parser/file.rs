@@ -1,6 +1,6 @@
 use super::file_helper::{
     craft_data_request, get_body, get_headers, get_log_option, get_method, get_url,
-    read_and_get_json, use_global_field, validate_field,
+    handle_result_error, read_and_get_json, use_global_field, validate_field,
 };
 use crate::http::types::DataRequest;
 use reqwest::header::HeaderMap;
@@ -14,15 +14,9 @@ pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>,
     let is_multiple_requests = requests.is_some();
 
     // get fields
-    let url = validate_field(
-        get_url(&json, &file_path, is_multiple_requests),
-        is_multiple_requests,
-    )?;
+    let url = validate_field(get_url(&json, &file_path), is_multiple_requests)?;
 
-    let method = validate_field(
-        get_method(&json, &file_path, is_multiple_requests),
-        is_multiple_requests,
-    )?;
+    let method = validate_field(get_method(&json, &file_path), is_multiple_requests)?;
 
     let body = get_body(&json);
     let headers = validate_field(get_headers(&json, &file_path), is_multiple_requests)?;
@@ -70,15 +64,15 @@ pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>,
         };
 
         for request in requests {
-            let request_url = use_global_field(get_url(&request, &file_path, false), url.clone())?;
+            let request_url = use_global_field(get_url(&request, &file_path), url.clone())?;
 
             let request_method =
-                use_global_field(get_method(&request, &file_path, false), method.clone())?;
+                use_global_field(get_method(&request, &file_path), method.clone())?;
 
             let request_body = get_body(&request);
 
             let mut request_headers = HeaderMap::new();
-            let headers_in_request = get_headers(&request, &file_path)?;
+            let headers_in_request = handle_result_error(get_headers(&request, &file_path))?;
 
             if headers.clone().is_some() {
                 request_headers = headers.clone().unwrap();
@@ -88,13 +82,26 @@ pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>,
                 }
             }
 
-            let request_show_error =
-                get_log_option("show_error", &request, &file_path, show_error)?;
-            let request_show_output =
-                get_log_option("show_output", &request, &file_path, show_output)?;
-            let request_show_status =
-                get_log_option("show_status", &request, &file_path, show_status)?;
-            let request_show_time = get_log_option("show_time", &request, &file_path, show_time)?;
+            let request_show_error = handle_result_error(get_log_option(
+                "show_error",
+                &request,
+                &file_path,
+                show_error,
+            ))?;
+            let request_show_output = handle_result_error(get_log_option(
+                "show_output",
+                &request,
+                &file_path,
+                show_output,
+            ))?;
+            let request_show_status = handle_result_error(get_log_option(
+                "show_status",
+                &request,
+                &file_path,
+                show_status,
+            ))?;
+            let request_show_time =
+                handle_result_error(get_log_option("show_time", &request, &file_path, show_time))?;
 
             let data_request = craft_data_request(
                 &json,
