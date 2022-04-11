@@ -1,80 +1,85 @@
-use super::file_helper::{get_headers, get_log_option, get_method};
+use super::file_helper::{
+    get_body, get_headers, get_log_option, get_method, get_url, read_and_get_json,
+};
 use crate::http::types::{DataRequest, Request};
+use reqwest::Method;
 use serde_json::json;
 
 pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>, ()> {
-    // Opening file
-    let file = match std::fs::File::open(file_path.clone()) {
-        Ok(file) => Ok(file),
-        Err(err) => {
-            eprintln!("\n[-] FAILED TO OPEN FILE, {:?}\n", err.to_string());
-            Err(())
+    // Read & get json from file
+    let json = read_and_get_json(&file_path).unwrap();
+
+    // check if it contains multiple requests
+    let requests = json.get("requests");
+    let is_multiple_requests = requests.is_some();
+
+    // get fields
+    let url: Option<String> = match get_url(&json, &file_path, is_multiple_requests) {
+        Ok(url) => Some(url),
+        Err(_) => {
+            if !is_multiple_requests {
+                return Err(());
+            }
+            None
         }
-    }?;
-
-    // Getting json data
-    let json: serde_json::Value = match serde_json::from_reader(file) {
-        Ok(json) => Ok(json),
-        Err(err) => {
-            eprintln!(
-                "\n[-] FAILED TO READ JSON CONTENTS FROM FILE {}: {:?} \n",
-                &file_path,
-                err.to_string()
-            );
-            Err(())
-        }
-    }?;
-
-    // TODO: check whether the file contains multiple requests
-
-    // Getting required fields
-    // `url`, `method` are required fields
-
-    let url = match json.get("url") {
-        Some(url) => Ok(url.as_str().unwrap().to_string()),
-        None => {
-            eprintln!("\n[-] FIELD `url` NOT FOUND IN {}\n", &file_path);
-            Err(())
-        }
-    }?;
-
-    let method = get_method(&json, &file_path)?;
-
-    // Optional fields
-    // `name`, `body`, `headers`, `show_error`, `show_output`, `show_status`, `show_time` are optional fields
-
-    let name = json!(format!("{}:{}", method.to_string(), url.to_string()));
-    let name = json.get("name").unwrap_or_else(|| &name).to_string(); // if name not exist, combining method:url, eg: GET:https://sample.api
-
-    let body = match json.get("body") {
-        // getting body if exist or returning an empty json
-        Some(data) => data.to_owned(),
-        None => json!({}),
     };
 
-    let headers = get_headers(&json, &file_path)?;
+    let method: Option<Method> = match get_method(&json, &file_path) {
+        Ok(method) => Some(method),
+        Err(_) => {
+            if !is_multiple_requests {
+                return Err(());
+            }
+            None
+        }
+    };
 
-    // Log options
+    let body = get_body(&json);
+    let headers = match get_headers(&json, &file_path) {
+        Ok(headers) => Some(headers),
+        Err(_) => {
+            if !is_multiple_requests {
+                return Err(());
+            }
+            None
+        }
+    };
+
     let show_error = get_log_option("show_error", &json, &file_path);
     let show_output = get_log_option("show_output", &json, &file_path);
     let show_status = get_log_option("show_status", &json, &file_path);
     let show_time = get_log_option("show_time", &json, &file_path);
 
-    // Building request
-    let request = Request {
-        url,
-        method,
-        body,
-        headers,
-    };
+    // get request if multiple requests
+    let mut requests: Vec<DataRequest> = vec![];
+
+    if !is_multiple_requests {
+        let name = json!(format!(
+            "{}:{}",
+            // Calling unwrap because we know this file only contains on request
+            method.as_ref().unwrap(),
+            url.as_ref().unwrap()
+        ));
+        let name = json.get("name").unwrap_or_else(|| &name).to_string(); // if name not exist, combining method:url, eg: GET:https://sample.api
+
+        // Building request
+        let request = Request {
+            url: url.unwrap(),
+            method: method.unwrap(),
+            body,
+            headers: headers.unwrap(),
+        };
+
+        requests.push(DataRequest {
+            name,
+            request,
+            show_error,
+            show_output,
+            show_status,
+            show_time,
+        })
+    }
 
     // returning DataRequest
-    Ok(vec![DataRequest {
-        name,
-        request,
-        show_error,
-        show_output,
-        show_status,
-        show_time,
-    }])
+    Ok(requests)
 }
