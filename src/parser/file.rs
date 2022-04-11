@@ -70,15 +70,10 @@ pub fn get_data_request_from_json(file_path: String) -> Result<Vec<DataRequest>,
         };
 
         for request in requests {
-            let request_url = use_global_field(
-                get_url(&request, &file_path, is_multiple_requests),
-                url.clone(),
-            )?;
+            let request_url = use_global_field(get_url(&request, &file_path, false), url.clone())?;
 
-            let request_method = use_global_field(
-                get_method(&request, &file_path, is_multiple_requests),
-                method.clone(),
-            )?;
+            let request_method =
+                use_global_field(get_method(&request, &file_path, false), method.clone())?;
 
             let request_body = get_body(&request);
 
