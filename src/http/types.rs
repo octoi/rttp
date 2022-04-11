@@ -46,16 +46,3 @@ pub struct DataRequest {
     pub show_status: bool,
     pub show_time: bool,
 }
-
-impl DataRequest {
-    pub fn new(name: &str, request: Request) -> Self {
-        Self {
-            name: name.to_string(),
-            request,
-            show_error: true,
-            show_output: true,
-            show_time: true,
-            show_status: true,
-        }
-    }
-}
