@@ -1,3 +1,4 @@
+use colored::Colorize;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Method,
@@ -144,13 +145,21 @@ pub fn craft_data_request(
     show_status: bool,
     show_time: bool,
 ) -> DataRequest {
-    let name = json!(format!(
-        "{}:{}",
-        // Calling unwrap because we know this file only contains on request
-        method.to_string(),
-        url
-    ));
-    let name = json.get("name").unwrap_or_else(|| &name).to_string(); // if name not exist, combining method:url, eg: GET:https://sample.api
+    let name = match json.get("name") {
+        Some(name) => format!(
+            "{}",
+            name.as_str()
+                .unwrap_or(name.to_string().as_str())
+                .to_string()
+                .cyan()
+        ),
+        None => format!(
+            "{}{}{}",
+            method.to_string().yellow(),
+            ":".white(),
+            url.cyan()
+        ),
+    };
 
     // Building request
     let request = Request {
